@@ -1,51 +1,34 @@
-"""
-embeddings_stub.py
-
-A simple deterministic "embedding" generator using hashing.
-This is a stub to simulate embedding vectors without calling a real model.
-
-- Deterministic: the same text always maps to the same vector.
-- Normalized: vectors have unit norm, so cosine similarity is valid.
-- Dimension: fixed to DIM (default = 64).
-
-Replace this with real embeddings (e.g., OpenAI, HuggingFace sentence-transformers)
-when integrating into production.
-"""
-
+from typing import List
 import hashlib
-import numpy as np
+import struct
+import math
 
-DIM = 64  # embedding dimension
+EMBED_DIM = 64
 
+def _float_from_bytes(b: bytes) -> float:
+    if len(b) < 4:
+        b = b.ljust(4, b'\0')
+    i = struct.unpack(">I", b[:4])[0]
+    return ((i / 0xFFFFFFFF) * 2.0) - 1.0
 
-def embed_text(text: str) -> np.ndarray:
-    """
-    Generate a deterministic pseudo-embedding for the given text.
+def embed_texts(texts: List[str]) -> List[List[float]]:
+    out = []
+    for t in texts:
+        h = hashlib.md5(t.encode("utf-8")).digest()
+        vec = []
+        for i in range(EMBED_DIM):
+            start = (i * 3) % len(h)
+            f = _float_from_bytes(h[start:start+4])
+            vec.append(f)
+        norm = math.sqrt(sum(x*x for x in vec))
+        if norm == 0:
+            norm = 1.0
+        vec = [x / norm for x in vec]
+        out.append(vec)
+    return out
 
-    Parameters
-    ----------
-    text : str
-        Input text string.
+def embed_text(text: str) -> List[float]:
+    return embed_texts([text])[0]
 
-    Returns
-    -------
-    np.ndarray
-        Normalized vector of shape (DIM,) with dtype float32.
-    """
-    if not isinstance(text, str):
-        raise ValueError("embed_text requires a string input")
-
-    # Hash the text into bytes
-    h = hashlib.sha256(text.encode("utf-8")).digest()
-
-    # Convert bytes -> numeric array
-    arr = np.frombuffer(h, dtype=np.uint8).astype(np.float32)
-
-    # Resize to fixed dimension
-    vec = np.resize(arr, DIM)
-
-    # Normalize to unit length
-    norm = np.linalg.norm(vec) + 1e-9
-    vec = vec / norm
-
-    return vec
+if __name__ == "__main__":
+    print(len(embed_texts(["hello world"])[0]))
