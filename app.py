@@ -7,6 +7,9 @@ from generator import generate_insight
 from translate_stub import translate_text
 from cache import ProfileCache
 from utils import parse_datetime
+import logging
+logger = logging.getLogger("astro")
+logging.basicConfig(level=logging.INFO)
 
 
 app = FastAPI(title="Astrological Insight Generator")
@@ -22,13 +25,20 @@ class BirthInput(BaseModel):
     language: Optional[constr(min_length=2, max_length=5)] = "en"
 
 
+
 @app.post("/predict")
 async def predict(data: BirthInput):
-# Parse & validate
-try:
-dt = parse_datetime(data.birth_date, data.birth_time)
-except Exception as e:
-raise HTTPException(status_code=400, detail=str(e))
+    try:
+        dt = parse_datetime(data.birth_date.isoformat(), data.birth_time.isoformat() if data.birth_time else None, place=data.birth_place)
+    except Exception as e:
+        logger.exception("Invalid date/place parse")
+        raise HTTPException(status_code=400, detail=f"Invalid date/place: {e}")
+
+    try:
+        insight = generate_insight(...)
+    except Exception as e:
+        logger.exception("Generation error")
+        raise HTTPException(status_code=500, detail="Internal generation error")
 
 
 zodiac = infer_zodiac(dt.month, dt.day)
