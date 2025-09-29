@@ -4,11 +4,57 @@ from embeddings_stub import embed_texts
 from vector_store import retrieve_similar
 import datetime
 import logging
+import requests
+from config import OPENAI_API_KEY, HF_API_KEY, USE_OPENAI, USE_HF
 
-logger = logging.getLogger("generator")
+logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 
+def _call_openai(prompt: str, max_tokens: int = 256, temperature: float = 0.8) -> str:
+    try:
+        import openai
+    except Exception as e:
+        raise RuntimeError("openai package not installed") from e
+    openai.api_key = OPENAI_API_KEY
+    resp = openai.ChatCompletion.create(
+        model="gpt-4o-mini",  # placeholder; change as needed
+        messages=[{"role": "system", "content": "You are a helpful astrological assistant."},
+                  {"role": "user", "content": prompt}],
+        max_tokens=max_tokens,
+        temperature=temperature,
+    )
+    return resp["choices"][0]["message"]["content"].strip()
+
+def _call_hf_api(prompt: str, model: str = "google/flan-t5-small", max_length: int = 200) -> str:
+    if not HF_API_KEY:
+        raise RuntimeError("HF API key not configured")
+    api_url = f"https://api-inference.huggingface.co/models/{model}"
+    headers = {"Authorization": f"Bearer {HF_API_KEY}"}
+    payload = {"inputs": prompt, "parameters": {"max_new_tokens": max_length}}
+    r = requests.post(api_url, headers=headers, json=payload, timeout=15)
+    r.raise_for_status()
+    data = r.json()
+    # HF returns a list with dicts; try to extract
+    if isinstance(data, list) and isinstance(data[0], dict) and "generated_text" in data[0]:
+        return data[0]["generated_text"].strip()
+    # fallback to stringified JSON
+    return str(data)
+
+def _invoke_llm(prompt: str) -> str:
+    # priority: OpenAI -> HF -> pseudo LLM
+    if USE_OPENAI:
+        try:
+            return _call_openai(prompt)
+        except Exception:
+            logger.exception("OpenAI call failed, falling back")
+    if USE_HF:
+        try:
+            return _call_hf_api(prompt)
+        except Exception:
+            logger.exception("HF call failed, falling back")
+    return pseudo_llm_generate(prompt)
+  
 def build_prompt(name: str,
                  zodiac: str,
                  profile_text: Optional[str] = "",
