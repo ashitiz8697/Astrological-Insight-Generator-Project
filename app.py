@@ -14,11 +14,12 @@ cache = ProfileCache(max_size=1000)
 
 
 class BirthInput(BaseModel):
-name: str
-birth_date: str # YYYY-MM-DD
-birth_time: Optional[str] = None # HH:MM (24h)
-birth_place: Optional[str] = None
-language: Optional[str] = "en"
+    name: str
+    birth_date: date
+    birth_time: Optional[time] = None
+    birth_place: Optional[str] = None
+    timezone: Optional[str] = None   # e.g., "Asia/Kolkata"
+    language: Optional[constr(min_length=2, max_length=5)] = "en"
 
 
 @app.post("/predict")
