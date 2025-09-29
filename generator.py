@@ -132,7 +132,7 @@ def generate_insight(name: str,
                           birth_date=birth_date,
                           birth_time=birth_time)
 
-    english_out = pseudo_llm_generate(prompt)
+    english_out = _invoke_llm(prompt)
 
     if not language or language.startswith("en"):
         return english_out
