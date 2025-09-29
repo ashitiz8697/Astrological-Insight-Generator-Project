@@ -22,33 +22,33 @@ vector_store.add(doc_id, txt)
 
 
 def _name_personalization(name: str) -> int:
-# deterministic small score from name
-h = hashlib.sha256(name.encode()).hexdigest()
-return int(h[:8], 16) % 100
+  # deterministic small score from name
+  h = hashlib.sha256(name.encode()).hexdigest()
+  return int(h[:8], 16) % 100
 
 
 
 
 def build_prompt(name, zodiac, dt: datetime, place, profile):
-# A simple prompt template — replace with real LLM call later
-score = profile.get("score", 50)
-now_str = dt.strftime("%b %d")
-prompt = (
-f"User: {name}\n"
-f"Birth Place: {place or 'unknown'}\n"
-f"Zodiac: {zodiac}\n"
-f"Date: {now_str}\n"
-f"ProfileScore: {score}\n"
-"Generate a short, positive daily insight (1-2 sentences) that
-is actionable and style-matched to the zodiac.\n"
-)
-return prompt
+  # A simple prompt template — replace with real LLM call later
+  score = profile.get("score", 50)
+  now_str = dt.strftime("%b %d")
+  prompt = (
+  f"User: {name}\n"
+  f"Birth Place: {place or 'unknown'}\n"
+  f"Zodiac: {zodiac}\n"
+  f"Date: {now_str}\n"
+  f"ProfileScore: {score}\n"
+  "Generate a short, positive daily insight (1-2 sentences) that
+  is actionable and style-matched to the zodiac.\n"
+  )
+  return prompt
 
 
 
 
 def generate_insight(name, zodiac, dt: datetime, place, profile: dict) -> str:
-prompt = build_prompt(name, zodiac, dt, place, profile)
+  prompt = build_prompt(name, zodiac, dt, place, profile)
 
 
 # pseudo-LLM: combine zodiac archetype with top retrieved corpus hit
