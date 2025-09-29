@@ -1,0 +1,31 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual env
+.env
+.venv/
+venv/
+env/
+
+# Editor / OS files
+.vscode/
+.DS_Store
+.idea/
+
+# Test / coverage
+.coverage
+htmlcov/
+
+# local user profile cache created by cache.py
+.user_profiles.json
+
+# Docker
+*.log
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
