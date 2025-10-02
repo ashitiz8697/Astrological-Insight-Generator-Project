@@ -83,23 +83,82 @@ def build_prompt(name: str,
     return prompt
 
 
-def pseudo_llm_generate(prompt: str) -> str:
+def pseudo_llm_generate(prompt: str, name_hint: str = None, birth_date_hint: str = None) -> str:
+    """
+    Lightweight, deterministic fallback LLM that uses:
+      - name_hint and birth_date_hint (if provided) to make outputs unique per user
+      - the prompt to detect zodiac and retrieved context
+      - a small set of templates selected via a stable hash
+    This avoids returning the exact same sentence for everyone.
+    """
+    import hashlib
+
+    # detect zodiac token in the prompt (preserve previous behavior)
     zodiac = "your sign"
-    for token in ["Aries","Taurus","Gemini","Cancer","Leo","Virgo","Libra","Scorpio","Sagittarius","Capricorn","Aquarius","Pisces"]:
-        if token.lower() in prompt.lower():
+    zodiac_tokens = ["Aries","Taurus","Gemini","Cancer","Leo","Virgo","Libra","Scorpio","Sagittarius","Capricorn","Aquarius","Pisces"]
+    lower = prompt.lower()
+    for token in zodiac_tokens:
+        if token.lower() in lower:
             zodiac = token
             break
 
-    insight = f"Today, {zodiac}'s inherent strengths will be highlighted; focus on clear priorities."
-    tip = "Actionable tip: take one small step toward your most important task."
+    # gather a short context hint from the prompt (first 140 chars)
+    ctx_hint = (prompt[:140].replace("\n", " ").strip() or "general")
 
-    if "short" in prompt.lower() or "concise" in prompt.lower():
-        out = f"{insight} {tip}"
-    else:
-        out = f"{insight} {tip} Keep an open mind and be kind to yourself."
+    # create a stable index from name+birth_date+ctx to choose a template
+    key = (name_hint or "") + "|" + (birth_date_hint or "") + "|" + ctx_hint
+    h = hashlib.sha256(key.encode("utf-8")).hexdigest()
+    idx = int(h[-8:], 16)
+
+    TEMPLATES = [
+        "{name}, today {zodiac}'s strength will help you cut through clutter. Tip: pick one priority and finish it.",
+        "{name}, a short conversation can reveal a useful idea. Tip: ask a clarifying question.",
+        "{name}, steady focus brings progress — small reps matter. Tip: schedule 25 minutes and start.",
+        "{name}, creative momentum is possible — capture quick ideas before they float away. Tip: jot one idea down.",
+        "{name}, kindness toward yourself opens better choices. Tip: take a brief pause before reacting."
+    ]
+
+    chosen = TEMPLATES[idx % len(TEMPLATES)]
+
+    # fill in name if available otherwise fall back to generic phrasing
+    name_for_template = name_hint if name_hint else "Friend"
+
+    # attached zodiac-specific short sentence
+    ZODIAC_EXTRA = {
+        "Aries": "You may feel ready to lead — take the initiative carefully.",
+        "Taurus": "Focus on durability and value today.",
+        "Gemini": "A curious question may start an interesting chain.",
+        "Cancer": "Tend to relationships — a small note will mean a lot.",
+        "Leo": "Confidence helps — show warmth and listen too.",
+        "Virgo": "Small improvements compound — polish one detail.",
+        "Libra": "Balance choices with artful compromise.",
+        "Scorpio": "Deep focus can produce meaningful results.",
+        "Sagittarius": "Learning or exploring will refresh your viewpoint.",
+        "Capricorn": "A steady milestone is within reach — aim for progress.",
+        "Aquarius": "Share your ideas — they might find allies.",
+        "Pisces": "Trust your intuition on something creative."
+    }
+
+    extra = ""
+    if zodiac in ZODIAC_EXTRA:
+        extra = " " + ZODIAC_EXTRA[zodiac]
+
+    # Add a short mention of retrieved/context hint if present
+    context_snippet = ""
+    if "Context from astrology corpus:" in prompt:
+        # crude extraction of the first context fragment if present
+        try:
+            after = prompt.split("Context from astrology corpus:", 1)[1]
+            snippet = after.split("|", 1)[0].strip()
+            if snippet:
+                context_snippet = f" (Context note: {snippet[:90].strip()})"
+        except Exception:
+            context_snippet = ""
 
     now = datetime.date.today().isoformat()
+    out = chosen.format(name=name_for_template, zodiac=zodiac) + extra + context_snippet
     return f"{out} (generated {now})"
+
 
 
 def generate_insight(name: str,
@@ -125,14 +184,23 @@ def generate_insight(name: str,
     retrieved = retrieve_similar(query_embedding, k=3)
 
     prompt = build_prompt(name=name,
-                          zodiac=zodiac,
-                          profile_text=profile_text,
-                          retrieved_ctx=retrieved,
-                          birth_place=birth_place,
-                          birth_date=birth_date,
-                          birth_time=birth_time)
+                      zodiac=zodiac,
+                      profile_text=profile_text,
+                      retrieved_ctx=retrieved,
+                      birth_place=birth_place,
+                      birth_date=birth_date,
+                      birth_time=birth_time)
 
-    english_out = _invoke_llm(prompt)
+    # log prompts + retrieved for debugging (safe to remove later)
+    logger.info("DEBUG prompt: %s", prompt)
+    logger.info("DEBUG retrieved ctx: %s", retrieved)
+
+    # invoke LLM; if falling back to pseudo_llm_generate, pass name and birth_date so fallback can personalize
+    if USE_OPENAI or USE_HF:
+        english_out = _invoke_llm(prompt)
+    else:
+        # call pseudo directly with hints to ensure personalization even when LLMs are disabled
+        english_out = pseudo_llm_generate(prompt, name_hint=name, birth_date_hint=birth_date)
 
     if not language or language.startswith("en"):
         return english_out
